@@ -4,7 +4,7 @@
 #include <sys/socket.h>
 
 
-static int p_threshold;
+static int p_threshold = 0;
 static int c_threshold;
 static int count = 1;
 
@@ -27,7 +27,8 @@ int sendto_(int i1, void* c1, int i2, int i3, struct sockaddr* sa, int i4)
 	double rnd_max = (double)RAND_MAX;
 
 	rnd = ((rand() / rnd_max) * 1000);
-	if (rnd > p_threshold) {
+	if (1 > p_threshold) {
+		printf("sending...\n");
 		return sendto(i1, c1, i2, i3, sa, i4);
 	}
 	return i2;
