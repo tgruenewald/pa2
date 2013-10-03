@@ -19,6 +19,18 @@ typedef struct
     char payload[PACKET_SIZE + 1];
 
 } MsgRec;
+
+void print_rec(MsgRec rec)
+{
+	printf("---------\n");
+	printf("rec->numPackets = [%s]\n",rec.numPackets);
+	printf("rec->packetId =   [%s]\n",rec.packetId);
+	printf("rec->ack =        [%s]\n",rec.ack);
+	printf("rec->rws =        [%s]\n",rec.rws);
+	printf("rec->payload =    [%s]\n",rec.payload);
+	printf("---------\n");
+}
+
 void init_net_lib(double f1, unsigned int seed)
 {
 	if ((f1 < 0) || (f1 > 1)) {
