@@ -20,6 +20,7 @@
 #include <memory.h>
 #include <string.h>
 #include <dirent.h>
+#include "sendto_.h"
 
 
 
@@ -74,198 +75,76 @@ int main (int argc, char * argv[] )
 
     char response[MAXBUFSIZE];
     int done = 0;
+    MsgRec *rec;
+    int i = 0;
+    int rws = 6;
+    int laf = rws;
+    int lfr = 0;
+    int totalExpectedPackets;
+    MsgRec *receivedMsg;
+    int prevPacketId = 0;
+    int packetId = 0;
     while (!done)
     {
         // wait for command from client
         int numbytes;
         bzero(buffer,sizeof(buffer));
-        if ((numbytes = recvfrom(sock, buffer, sizeof(buffer)-1 , 0,
+        if ((numbytes = recvfrom(sock, buffer, sizeof(buffer)-1, 0,
                                  (struct sockaddr *)&from_addr, &addr_length)) == -1)
         {
             perror("recvfrom");
             exit(1);
         }
         printf("Got: %s\n", buffer);
-    }
-    /*
-        if (strcmp("exit", buffer) == 0)
+        rec = (MsgRec *) buffer;
+        if (i == 0)
         {
-            strcpy(response,"Exiting");
-            done = 1;
-            printf("Sending %s\n", response);
-
-            if ((numbytes = sendto(sock,response, strlen(response),0,(struct sockaddr *)&from_addr,  addr_length)) == -1)
-            {
-                perror("talker: sendto");
-                exit(1);
-            }
+        	// then read the num packets
+        	printf("Total expected number of packets [%s]\n", rec->numPackets);
+        	totalExpectedPackets = atoi(rec->numPackets);
+        	receivedMsg = malloc(totalExpectedPackets*sizeof(MsgRec));
         }
-        else if (strcmp("ls", buffer) == 0)
+        memcpy(&receivedMsg[i],rec,sizeof(MsgRec));
+        packetId = atoi(rec->packetId);
+        if ((packetId - prevPacketId) > 1)
         {
-            printf("Listing directory contents\n");
-            // send back the list
-            struct dirent *de=NULL;
-            DIR *d=NULL;
-
-            // open the current directory
-            d=opendir(".");
-            if(d == NULL)
-            {
-                perror("Couldn't open directory");
-                return(2);
-            }
-            strcpy(response,"");
-
-            // Loop while not NULL
-            while((de = readdir(d)))
-            {
-                if ( (strlen(response) + strlen(de->d_name)) > MAXBUFSIZE)
-                {
-                    strcpy(response,"Buffer exceeded.  More files than can be listed.");
-                    printf("%s\n",response);
-                    break;
-                }
-                strcat(response, de->d_name);
-                strcat(response, "\n");
-
-            }
-            closedir(d);
-
-            printf("Sending dir listing to client\n");
-
-            // send dir listing to the client
-            if ((numbytes = sendto(sock,response, strlen(response),0,(struct sockaddr *)&from_addr,  addr_length)) == -1) {
+        	// then packets arrive out of order
+        	printf("Packets arrive out of order, just send the last ack back");
+        	int len = sizeof(rec[lfr]);
+			char *buf = malloc(len);
+			memcpy(buf, &receivedMsg[lfr], len);
+            if ((numbytes = sendto_(sock,buf, len,0,(struct sockaddr *)&from_addr, addr_length)) == -1) {
                 perror("talker: sendto");
                 exit(1);
             }
-
-        }
-        else if (strlen(buffer) > 3 && strncmp("put", buffer,3) == 0)
-        {
-            char command[MAXBUFSIZE];
-            // send ack to client
-            printf("Sending ack back to client\n");
-            strcpy(command,"ack");
-            if ((numbytes = sendto(sock,command, strlen(command),0,(struct sockaddr *)&from_addr, addr_length)) == -1) {
-                perror("talker: sendto");
-                exit(1);
-            }
-
-            printf("Waiting to get file name and file size\n");
-            // receive the file name and size now
-            if ((numbytes = recvfrom(sock, command, sizeof command , 0,
-                                     (struct sockaddr *)&from_addr, &addr_length)) == -1)
-            {
-                perror("recvfrom");
-                exit(1);
-            }
-
-            // then parse the length and filename
-            char *fileName = strtok(command,"/"); // filename
-
-            long fileSize = atol(strtok(NULL," "));  // file size
-
-
-            // send ack to client
-            char ack[4];
-            strcpy(ack,"ack");
-            if ((numbytes = sendto(sock,ack, strlen(ack),0,(struct sockaddr *)&from_addr, addr_length)) == -1) {
-                perror("talker: sendto");
-                exit(1);
-            }
-
-            char *fileContentsBuffer;
-            fileContentsBuffer = malloc(fileSize);
-
-
-            // receive the actual file contents from the server
-            if ((numbytes = recvfrom(sock, fileContentsBuffer, fileSize , 0,
-                                     (struct sockaddr *)&from_addr, &addr_length)) == -1)
-            {
-                perror("recvfrom");
-                exit(1);
-            }
-
-            // send response to server requesting the file contents now.
-            printf("opening file for writing...[%s]\n",fileName);
-            FILE *fp = fopen(fileName, "w");
-            fwrite(fileContentsBuffer, sizeof(char), numbytes,fp);
-            fclose(fp);
-            printf("Done writing\n");
-            free(fileContentsBuffer);
-        }
-        else if (strlen(buffer) > 3 && strncmp("get", buffer,3) == 0)
-        {
-
-            char *fileName = strtok(buffer," "); // ignore the "get" token
-            fileName = strtok(NULL," "); // get the second token which is the file name.
-            printf("Sending file %s\n", fileName);
-
-            // open file and find out its length
-            FILE *fp = fopen(fileName, "r");
-            fseek(fp, 0L, SEEK_END);
-            int fileSize = ftell(fp);
-            fseek(fp, 0L, SEEK_SET);
-            printf("File is size = %d\n", fileSize);
-
-            // read file into buffer
-            unsigned char *buffer;
-            buffer = malloc(fileSize);
-            if (fread(buffer, sizeof(*buffer), fileSize,fp) != fileSize)
-            {
-                perror("Mismatched read.  Not all bytes were read");
-                exit(1);
-            }
-            fclose(fp);
-
-            // first send the file name and size to the client
-            // then send a file over to the client.
-            char fileAndSize[MAXBUFSIZE];
-            sprintf(fileAndSize,"%s/%d",fileName,fileSize);
-            if ((numbytes = sendto(sock,fileAndSize, strlen(fileAndSize),0,(struct sockaddr *)&from_addr,  addr_length)) == -1)
-            {
-                perror("Unable to send file");
-                free(buffer);
-                exit(1);
-            }
-
-            // wait for client to respond
-            char ack[MAXBUFSIZE];
-
-            if ((numbytes = recvfrom(sock, ack, sizeof(ack)-1 , 0,
-                                     (struct sockaddr *)&from_addr, &addr_length)) == -1)
-            {
-                perror("recvfrom");
-                exit(1);
-            }
-
-
-
-            // then send a file over to the client.
-            if ((numbytes = sendto(sock,buffer, fileSize,0,(struct sockaddr *)&from_addr,  addr_length)) == -1)
-            {
-                perror("Unable to send file");
-
-            }
-            free(buffer);
-
+            free(buf);
         }
         else
         {
-            strcpy(response,"Unknown command:  ");
-            strcat(response, buffer);
-            printf("Sending %s\n", response);
-
-            if ((numbytes = sendto(sock,response, strlen(response),0,(struct sockaddr *)&from_addr,  addr_length)) == -1) {
-                perror("sendto error");
-                exit(1);
-            }
-
+        	// packets are in order, proceed
+            prevPacketId = packetId;
+            laf++;
+            lfr = i;
+            i++;
+            printf("sending ack\n");
+            sprintf(rec->rws,"%d", rws - lfr);
+            sprintf(rec->ack,"%d",lfr);
+            int len = sizeof(rec[lfr]);
+			char *buf = malloc(len);
+			printf("the ack i think i'm sending %s\n", rec->ack);
+			memcpy(buf, rec, len);
+	        if ((numbytes = sendto_(sock,buf, len,0,(struct sockaddr *)&from_addr, addr_length)) == -1) {
+	            perror("talker: sendto");
+	            exit(1);
+	        }
+	        free(buf);
         }
 
 
-    } // end while
-*/
+
+
+    }
+
 	close(sock);
 }
 

@@ -7,7 +7,18 @@
 static int p_threshold = 0;
 static int c_threshold;
 static int count = 1;
+#define PACKET_SIZE 1024
 
+typedef struct
+{
+    char numPackets[10];
+    char packetId[10];
+    char ack[10];
+    char rws[10];
+
+    char payload[PACKET_SIZE + 1];
+
+} MsgRec;
 void init_net_lib(double f1, unsigned int seed)
 {
 	if ((f1 < 0) || (f1 > 1)) {

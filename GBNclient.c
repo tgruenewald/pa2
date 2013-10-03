@@ -16,14 +16,9 @@
 #include <unistd.h>
 #include "sendto_.h"
 
-#define PACKET_SIZE 1024
-//adding this comment line
-typedef struct
-{
-    int numPackets;
-    char payload[PACKET_SIZE + 1];
 
-} MsgRec;
+//adding this comment line
+
 MsgRec *open_file(char *fileName);
 int main(int argc, char *argv[]) {
 
@@ -61,17 +56,59 @@ int main(int argc, char *argv[]) {
 
     // open the file
     MsgRec *rec = open_file("test.txt");
-    int i = rec[0].numPackets;
-    printf("Number of packets = %d\n", i);
+    int totalPackets = atoi(rec[0].numPackets);
+    printf("Number of packets = %d\n", totalPackets);
     int x;
    	int nbytes;
-    for (x = 0;x < i; x++)
+   	int sws = 6;
+   	int lfs = 1;
+   	int lar = 0;
+   	fd_set select_fds;
+   	struct timeval timeout;
+    for (x = 0;x < totalPackets; x++)
     {
-    	printf("rec[%d]->payload= [%s]\n", x, rec[x].payload);
 
-    	nbytes = sendto_(sd, rec[x].payload, strlen( rec[x].payload),0, (struct sockaddr *) &remoteServAddr, sizeof(remoteServAddr));
+    	while (lfs < sws)
+    	{
+    		sprintf(rec[x].packetId,"%d", lfs);
+			printf("rec[%d]->payload= [%s]\n", x, rec[x].payload);
+			int len = sizeof(rec[x]);
+			char *buf = malloc(len);
+			memcpy(buf, &rec[x], len);
+			nbytes = sendto_(sd, buf, len,0, (struct sockaddr *) &remoteServAddr, sizeof(remoteServAddr));
+			free(buf);
+			printf("Sent\n");
+			lfs++;
+    	}
 
-    	printf("Sent\n");
+
+    	// now wait for acknowledgements
+    	FD_ZERO(&select_fds);
+    	FD_SET(sd, &select_fds);
+
+    	timeout.tv_sec = 30; // 3 second timeout
+    	timeout.tv_usec = 0;
+
+    	if (select(sd + 1, &select_fds, NULL,NULL, &timeout) == 0)
+    	{
+    		printf("timeout occurred\n");
+    	}
+    	else
+    	{
+    	    struct sockaddr_in from_addr;
+    	    int addr_length = sizeof(struct sockaddr);
+			int len = sizeof(MsgRec);
+			char *buf = malloc(len);
+			int numbytes;
+            if ((numbytes = recvfrom(sd, buf, len, 0,
+            		 (struct sockaddr *)&from_addr, &addr_length)) == -1)
+            {
+                perror("recvfrom");
+                exit(1);
+            }
+            rec = (MsgRec *) buf;
+            printf("rec %s\n", rec->ack);
+    	}
     }
 
     // create an array of structs that will be what will be sent, and keep track of the acks coming back
@@ -108,6 +145,7 @@ MsgRec *open_file(char *fileName)
     while (i < numberOfPackets)
     {
 
+    	memset(&rec[i], '\0', sizeof(MsgRec));
     	memset(rec[i].payload,'\0', PACKET_SIZE + 1);
         strncpy(rec[i].payload, bufRead, PACKET_SIZE);
    //     printf("rec[%d]->payload= [%s]\n", i, rec[i].payload);
@@ -115,8 +153,9 @@ MsgRec *open_file(char *fileName)
         if (len >= PACKET_SIZE)
         	bufRead = bufRead + PACKET_SIZE;
         i++;
+        sprintf(rec[i].packetId,"%d", i);
     }
-    rec[0].numPackets = i;
+    sprintf(rec[0].numPackets,"%d", i);  // the very first packet contains the number of packets to expect
     free(buffer);
     return rec;
 }
