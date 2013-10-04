@@ -27,7 +27,7 @@ void print_rec(MsgRec rec)
 	printf("rec->packetId =   [%s]\n",rec.packetId);
 	printf("rec->ack =        [%s]\n",rec.ack);
 	printf("rec->rws =        [%s]\n",rec.rws);
-	printf("rec->payload =    [%s]\n",rec.payload);
+//	printf("rec->payload =    [%s]\n",rec.payload);
 	printf("---------\n");
 }
 
