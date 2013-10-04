@@ -152,8 +152,9 @@ MsgRec *open_file(char *fileName)
         int len = strlen(bufRead);
         if (len >= PACKET_SIZE)
         	bufRead = bufRead + PACKET_SIZE;
-        i++;
+
         sprintf(rec[i].packetId,"%d", i);
+        i++;
     }
     sprintf(rec[0].numPackets,"%d", i);  // the very first packet contains the number of packets to expect
     free(buffer);
