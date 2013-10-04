@@ -60,7 +60,7 @@ int main(int argc, char *argv[]) {
     printf("Number of packets = %d\n", totalPackets);
     int x;
    	int nbytes;
-   	int sws = 6;
+   	int sws = 9;
    	int lfs = 1;
    	int lar = 0;
    	fd_set select_fds;
@@ -89,12 +89,24 @@ int main(int argc, char *argv[]) {
     	timeout.tv_sec = 30; // 3 second timeout
     	timeout.tv_usec = 0;
 
+		// set timeout to 50ms
     	if (select(sd + 1, &select_fds, NULL,NULL, &timeout) == 0)
     	{
+			// during a timeout, this is the time to run through the SWS window
+			// and see what has yet to be acknowledged.  If you get to this and 
+			// you see that there is a "hole" in the acks, then go ahead resend them
+			// all.
+			
+			// so now we have to handle the situation where the RWS was set to 
+			// zero, then we need to stop sending packets, and send a "probe" packet (i.e. 
+			// basically a packet that has like a -1 packetId.)   Eventually you will
+			// get a RWS > 0, then you know you can start sending again.
     		printf("timeout occurred\n");
     	}
     	else
     	{
+			// then this means that we got an ack back, so go ahead and based on 
+			// packet number, find it in the array, and mark it ack'd.
     	    struct sockaddr_in from_addr;
     	    int addr_length = sizeof(struct sockaddr);
 			int len = sizeof(MsgRec);
@@ -111,6 +123,15 @@ int main(int argc, char *argv[]) {
     	}
     }
 
+	// so we also have to handle the case where the LAST ack doesn't come back.  
+/*
+Question #7: What should the client do if the last ACK is lost?
+On the client side, the last ACK could be lost. In this case, the client will retransmit, but your
+server will have already terminated. To terminate the client cleanly, your program should
+implement the following solution to the last ACK problem: the client should retransmit the last
+data packet at most ten times, and then should close any open files such as the client log file
+and then terminate. Clarify your solution in the README that you turn in.	*/
+	
     // create an array of structs that will be what will be sent, and keep track of the acks coming back
 
     // go into a loop that sends each of the parts of the file according to the SWS
