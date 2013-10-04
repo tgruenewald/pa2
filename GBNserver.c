@@ -15,7 +15,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <sys/time.h>
+#include <time.h>
 #include <stdlib.h>
 #include <memory.h>
 #include <string.h>
@@ -25,8 +25,10 @@
 
 
 #define MAXBUFSIZE 10000
-//FILE *fp;
-#define LOGFILE stdout
+FILE *fp;
+//#define LOGFILE stdout
+#define LOGFILE fp
+#define PACKET_SLOWDOWN 30   // slowdown after this many packets
 int main (int argc, char * argv[] )
 {
 
@@ -42,13 +44,11 @@ int main (int argc, char * argv[] )
 	}
 
 
-/*
     if ((fp = fopen(argv[5],"w")) == NULL)
     {
-    	perror("Unable to open log file %s\n", argv[5]);
+    	printf("Unable to open log file %s\n", argv[5]);
     	exit(1);
     }
-    */
     if ((outputFile = fopen(argv[4],"w")) == NULL)
     {
     	printf("Unable to open output file %s\n", argv[4]);
@@ -100,9 +100,6 @@ int main (int argc, char * argv[] )
     int expectedPacket = 0;
     int totalReceivedPackets = 0;
     int increasing_mode = 0;
-	struct tm *curTime;
-	time_t storeTime;
-
 
     while (totalReceivedPackets != totalExpectedPackets)
     {
@@ -143,16 +140,16 @@ int main (int argc, char * argv[] )
         }
         fprintf(LOGFILE,"Receiving:\n");
         print_rec(*rec);
-		storeTime = time(NULL);
-		curTime = localtime(&storeTime);
-		fprintf(LOGFILE,"Receive seq=%s free_slots=%d LFRead=%d LFRcvd=%d LAF=%d time=%s\n", rec->packetId, laf - lfr, lfr-1,lfr,laf,asctime(curTime));
+        time_t now;
+        time(&now);
+		fprintf(LOGFILE,"Receive seq=%s free_slots=%d LFRead=%d LFRcvd=%d LAF=%d time=%s\n", rec->packetId, laf - lfr, lfr-1,lfr,laf,ctime(&now));
 
 
 
         packetId = atoi(rec->packetId);
         i++;
 
-        if (i > 8 && !increasing_mode)
+        if (i > PACKET_SLOWDOWN && !increasing_mode)
         {
         	if (laf > 0 && (laf - lfr) >= 0)
         	{
@@ -171,9 +168,9 @@ int main (int argc, char * argv[] )
 			char *buf = malloc(len);
 			memcpy(buf, rec, len);
 			// <Send | Resend | Receive> <Seq #> [Free Slots] <LFRead> <LFRcvd> <LAF> <Time>
-			storeTime = time(NULL);
-			curTime = localtime(&storeTime);
-			fprintf(LOGFILE,"Resend seq=%s free_slots=%d LFRead=%d LFRcvd=%d LAF=%d time=%s\n", rec->packetId, laf - lfr, lfr-1,lfr,laf,asctime(curTime));
+	        time_t now;
+	        time(&now);
+			fprintf(LOGFILE,"Resend seq=%s free_slots=%d LFRead=%d LFRcvd=%d LAF=%d time=%s\n", rec->packetId, laf - lfr, lfr-1,lfr,laf,ctime(&now));
             if ((numbytes = sendto_(sock,buf, len,0,(struct sockaddr *)&from_addr, addr_length)) == -1) {
                 perror("talker: sendto");
                 exit(1);
@@ -189,6 +186,7 @@ int main (int argc, char * argv[] )
             prevPacketId = packetId;
 
             memcpy(&receivedMsg[lfr],rec,sizeof(MsgRec));
+            fprintf(LOGFILE,"Payload[%d]: [%s]\n",lfr, receivedMsg[lfr].payload);
 
             sprintf(rec->rws,"%d", laf - lfr);
             sprintf(rec->ack,"%d",lfr);
@@ -199,9 +197,9 @@ int main (int argc, char * argv[] )
 			memcpy(buf, rec, len);
             fprintf(LOGFILE,"Sending:\n");
             print_rec(*rec);
-			storeTime = time(NULL);
-			curTime = localtime(&storeTime);
-			fprintf(LOGFILE,"send seq=%s free_slots=%d LFRead=%d LFRcvd=%d LAF=%d time=%s\n", rec->packetId, laf - lfr, lfr-1,lfr,laf,asctime(curTime));
+            time_t now;
+            time(&now);
+			fprintf(LOGFILE,"send seq=%s free_slots=%d LFRead=%d LFRcvd=%d LAF=%d time=%s\n", rec->packetId, laf - lfr, lfr-1,lfr,laf,ctime(&now));
 	        if ((numbytes = sendto_(sock,buf, len,0,(struct sockaddr *)&from_addr, addr_length)) == -1) {
 	            perror("talker: sendto");
 	            exit(1);
@@ -220,9 +218,9 @@ int main (int argc, char * argv[] )
 			memcpy(buf, rec, len);
 			fprintf(LOGFILE,"Sending:\n");
 			print_rec(*rec);
-			storeTime = time(NULL);
-			curTime = localtime(&storeTime);
-			fprintf(LOGFILE,"resend seq=%s free_slots=%d LFRead=%d LFRcvd=%d LAF=%d time=%s\n", rec->packetId, laf - lfr, lfr-1,lfr,laf,asctime(curTime));
+	        time_t now;
+	        time(&now);
+			fprintf(LOGFILE,"resend seq=%s free_slots=%d LFRead=%d LFRcvd=%d LAF=%d time=%s\n", rec->packetId, laf - lfr, lfr-1,lfr,laf,ctime(&now));
 			if ((numbytes = sendto_(sock,buf, len,0,(struct sockaddr *)&from_addr, addr_length)) == -1) {
 				perror("talker: sendto");
 				exit(1);
@@ -270,6 +268,7 @@ int main (int argc, char * argv[] )
     	fwrite(receivedMsg[c].payload, sizeof(char), PACKET_SIZE,outputFile);
     }
     fclose(outputFile);
+    fclose(fp);
 
     free(receivedMsg);
 	close(sock);

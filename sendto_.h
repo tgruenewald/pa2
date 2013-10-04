@@ -22,6 +22,7 @@ typedef struct
 
 void print_rec(MsgRec rec)
 {
+	return;
 	printf("---------\n");
 	printf("rec->numPackets = [%s]\n",rec.numPackets);
 	printf("rec->packetId =   [%s]\n",rec.packetId);
@@ -51,7 +52,7 @@ int sendto_(int i1, void* c1, int i2, int i3, struct sockaddr* sa, int i4)
 
 	rnd = ((rand() / rnd_max) * 1000);
 	if (1 > p_threshold) {
-		printf("sending...\n");
+		//printf("sending...\n");
 		return sendto(i1, c1, i2, i3, sa, i4);
 	}
 	return i2;
